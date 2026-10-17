@@ -128,7 +128,7 @@
     "@vitejs/plugin-react": "^6.1.1",
     "@webgpu/types": "^0.1.74",
     "fake-indexeddb": "^6.2.5",
-    "happy-dom": "^20.14.5",
+    "happy-dom": "^21.0.1",
     "jszip": "^3.10.2",
     "svgo": "^4.1.0",
     "tsx": "^4.23.15",
