@@ -17,6 +17,7 @@ import { useMemo } from 'react';
 import { useViewerStore } from '@/store';
 import { isCollabEnabled } from '@/lib/collab/config';
 import type { WorkspacePanelId } from '@/lib/panels/registry';
+import { hiddenByBimpeil } from '@/bimpeil/hiddenPanels';
 
 export function useRailPanelIds(): WorkspacePanelId[] {
   const order = useViewerStore((s) => s.sidebarOrder);
@@ -26,7 +27,9 @@ export function useRailPanelIds(): WorkspacePanelId[] {
     return order.filter(
       (id) =>
         (!hidden.has(id) || id === 'properties') &&
-        (id !== 'collab' || isCollabEnabled()),
+        (id !== 'collab' || isCollabEnabled()) &&
+        // BIMpeil: panelen die BIMpeil niet aanbiedt (src/bimpeil/hiddenPanels.ts)
+        !hiddenByBimpeil(id),
     );
   }, [order, hiddenIds]);
 }

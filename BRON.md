@@ -6,7 +6,7 @@ Elke versie die BIMpeil gebruikt, staat hier als één commit met een tag `viewe
 
 | | |
 | --- | --- |
-| Tag | `viewer-e67f62a38` |
+| Tag | `viewer-ceeacb5c3` |
 | IfcLite | `@ifc-lite/renderer@6.0.1` (commit `e79f27342beb01a6f30d9b63c44795ecd118f4de`) |
 | @ifc-lite/wasm | `10.3.0` |
 

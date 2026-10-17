@@ -74,7 +74,8 @@ describe('Cloud sources is reachable from desktop command surfaces', () => {
     assert.equal(useViewerStore.getState().sourcesPanelVisible, false, 'second click did not close the panel');
   });
 
-  it('opens the panel from the command palette', async () => {
+  // BIMpeil: Bronnen is verborgen (src/bimpeil/hiddenPanels.ts); het palet biedt het dus niet aan
+  it('does not offer the panel in the command palette (BIMpeil)', async () => {
     const container = render(
       <BimProvider>
         <CommandPalette open onOpenChange={() => {}} />
@@ -83,12 +84,7 @@ describe('Cloud sources is reachable from desktop command surfaces', () => {
 
     const row = [...container.ownerDocument.body.querySelectorAll<HTMLElement>('[role="option"], button')]
       .find((el) => el.textContent?.includes(resolve(panelTitleKey('sources'))));
-    assert.ok(row, 'the palette lists no Cloud Sources command');
-    click(row);
-    // `runCommand` defers to `requestAnimationFrame` (a file-dialog quirk), so
-    // the action has NOT run when click() returns. Let the frame land.
+    assert.equal(row, undefined, 'the palette still lists Cloud Sources');
     await act(async () => { await new Promise<void>((resolve) => requestAnimationFrame(() => resolve())); });
-
-    assert.equal(useViewerStore.getState().sourcesPanelVisible, true, 'the palette command did not open the panel');
   });
 });

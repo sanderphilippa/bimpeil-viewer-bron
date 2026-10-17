@@ -14,6 +14,7 @@ import { isBottomPanelDocked } from '@/lib/panels/bottom-panels';
 import { panelGroupFor, panelTitleKey } from '@/lib/panels/registry';
 import { useViewerStore } from '@/store';
 import type { RightPanel } from './commandPaletteCommandsTypes';
+import { hiddenByBimpeil } from '@/bimpeil/hiddenPanels';
 import type { Command } from './commandPaletteSearch';
 import type {
   SurfaceCommandContext, SurfaceCommandDefinition, SurfaceCommandState,
@@ -99,7 +100,9 @@ export const PANEL_SURFACE_COMMANDS = [
   },
   rightCommand('panel:lens', 'lens', 'lens rules color filter highlight', Palette, true),
   rightCommand('panel:layers', 'layers', 'ifcx layers federation draft publish merge review provenance registry version overlay', Layers, true),
-  rightCommand('panel:sources', 'sources', 'cde common data environment connect provider bim360 acc trimble dalux integration remote', Cloud, true),
+  // BIMpeil: niet in BIMpeil (src/bimpeil/hiddenPanels.ts)
+  rightCommand('panel:sources', 'sources', 'cde common data environment connect provider bim360 acc trimble dalux integration remote', Cloud, true,
+    () => !hiddenByBimpeil('sources')),
   rightCommand('panel:zones', 'zones', 'zone section takt area construction location apportionment storey', Box, true),
   rightCommand('panel:loadReport', 'loadReport', 'geometry diagnostics warnings dropped items csg openings unsupported load report', FileWarning, true),
   rightCommand('panel:pointclouds', 'pointclouds', 'point clouds scan las laz e57 splat classification deviation registration alignment', Scan),

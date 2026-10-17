@@ -46,8 +46,9 @@ describe('shared panel command homes (#5870)', () => {
       .filter((command) => command.id.startsWith('panel:'));
     const available = paletteSurfaceCommands({ canEditInSession: true, collabEnabled: true }, () => {})
       .filter((command) => command.id.startsWith('panel:'));
-    assert.deepEqual(hidden.map((command) => command.id), PANEL_IDS.filter((id) => id !== 'panel:collab'));
-    assert.deepEqual(available.map((command) => command.id), PANEL_IDS);
+    // BIMpeil: Bronnen is altijd verborgen (src/bimpeil/hiddenPanels.ts)
+    assert.deepEqual(hidden.map((command) => command.id), PANEL_IDS.filter((id) => id !== 'panel:collab' && id !== 'panel:sources'));
+    assert.deepEqual(available.map((command) => command.id), PANEL_IDS.filter((id) => id !== 'panel:sources'));
 
     const rendered = buildPanelCommands(params()).filter((command) => command.id.startsWith('panel:'));
     assert.deepEqual(rendered.map((command) => command.id), hidden.map((command) => command.id),

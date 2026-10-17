@@ -56,6 +56,7 @@ Gewijzigde bestanden van ifc-lite (onder `apps/viewer/src/`):
 - `components/viewer/HierarchyPanel.tsx` en in `components/viewer/hierarchy/`: `types.ts`, `revealGlobalId.ts`, `useHierarchyTree.ts`, `rowSelection.ts`, `useHierarchyTreeKeyboard.ts`, `HierarchyNode.tsx` (indeling per hoofdstuk van de BIM basis ILS, de boom zelf in `src/bimpeil/ilsTree.ts`)
 - `hooks/useLens.ts` (de lens van de classificatieregels: niet bewaard, treffers al uitgerekend in `src/bimpeil/classRulesStore.ts`); de boom per klas (`klassen`) gebruikt dezelfde haken als de ILS indeling hierboven
 - `hooks/useKeyboardShortcuts.ts`, `hooks/usePanelControls.ts`
+- `hooks/useRailPanelIds.ts`, `components/viewer/ribbon/PanelGroupBrowser.tsx`, `components/viewer/surface-commands-panels.ts` (panelen die BIMpeil niet aanbiedt, nu Bronnen: `src/bimpeil/hiddenPanels.ts`, met daar hoe je het terugdraait), en in de tests `surface-commands-panels.test.ts` en `toolbar/cloud-sources-entrypoints.test.tsx`
 - `i18n/en.ts`
 - `lib/panels/registry.ts`, `lib/panels/renderPanelBody.tsx`
 - `store/index.ts`, `store/slices/uiSlice.ts`, `store/slices/uiPreferences.ts`, `store/store-sync.ts`
