@@ -17,6 +17,7 @@ import { AnalysisRunButton } from './analysis/AnalysisRunActions';
 // BIMpeil: IDS uit het project en de bibliotheek (src/bimpeil/BimpeilIdsSource.tsx)
 import { BimpeilIdsSource } from '@/bimpeil/BimpeilIdsSource';
 import { BIMPEIL_IDS_ONLY } from '@/bimpeil/idsOnly';
+import { ArtifactHeader } from './result/ArtifactHeader';
 
 /** IDS validation progress as the shared analysis progress state (#5834). */
 export function idsProgressState(
@@ -85,14 +86,13 @@ export function IDSPanelStates({ ids, fileInputRef, onFileSelect, onLoadClick }:
   const auditErrorCount = auditReport?.issues.filter((issue) => issue.severity === 'error').length ?? 0;
   return (
     <div className="p-4 space-y-3">
-      <div className="rounded-lg border p-4">
-        <h3 className="font-medium text-sm mb-1">{document.info.title}</h3>
-        {document.info.description && <p className="text-xs text-muted-foreground mb-2">{document.info.description}</p>}
-        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-          <span>{t('idsPanel.specifications', { count: document.specifications.length, countDisplay: formatLocaleNumber(locale, document.specifications.length) })}</span>
-          {document.info.version && <span>{t('idsPanel.version', { version: document.info.version })}</span>}
-        </div>
-      </div>
+      <ArtifactHeader
+        className="rounded-lg border p-4"
+        name={document.info.title}
+        sourceScope={t('idsPanel.specifications', { count: document.specifications.length, countDisplay: formatLocaleNumber(locale, document.specifications.length) })}
+        description={document.info.description}
+        revision={document.info.version ? t('idsPanel.version', { version: document.info.version }) : undefined}
+      />
       <IDSAuditSummary report={auditReport} auditing={auditing} />
       <AnalysisRunButton
         running={validating}

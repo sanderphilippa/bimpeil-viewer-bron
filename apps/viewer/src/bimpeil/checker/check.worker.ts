@@ -27,6 +27,9 @@ export type CheckWorkerResponse =
 
 const post = (msg: CheckWorkerResponse) => (self as unknown as Worker).postMessage(msg);
 
+/** Geen IFC model om te controleren (VIEW-005); BIMpeil toont de tekst als reden van een mislukte controle */
+export const NOT_A_MODEL = 'Het bestand is geen leesbaar IFC model.';
+
 self.onmessage = async (event: MessageEvent<CheckWorkerRequest>) => {
   const req = event.data;
   if (!req || req.type !== 'check') return;
@@ -35,6 +38,11 @@ self.onmessage = async (event: MessageEvent<CheckWorkerRequest>) => {
     const store = await new IfcParser().parseColumnar(req.buffer);
     const accessor = createDataAccessor(store);
     const entityCount = store.entityCount ?? accessor.getAllEntityIds().length;
+    // Geen model (audit VIEW-005): een bestand dat geen STEP is of afgekapt is, geeft geen fout van de parser maar 0
+    // entiteiten; zonder deze controle eindigde het als gecontroleerd, met een IDS met alleen optionele eisen zelfs als
+    // "voldoet"
+    if (entityCount === 0) throw new Error(NOT_A_MODEL);
+    if (accessor.getEntitiesByType('IFCPROJECT').length === 0) throw new Error(`${NOT_A_MODEL} Er staat geen IfcProject in.`);
     const report = await validateIDS(
       req.document,
       accessor,

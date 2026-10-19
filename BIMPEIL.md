@@ -13,7 +13,7 @@ De volledige werkwijze (dagelijks werken, weigeringen van `viewer:build`, upgrad
 | `origin` | `sanderphilippa/bimpeil-viewer` (privé) |
 | `upstream` | `LTplus-AG/ifc-lite`, alleen ophalen (push staat uit) |
 
-`main` staat op de release van `@ifc-lite/renderer@6.0.1` (`e79f273`). De gepubliceerde WASM hoort bij die commit, dus Rust is niet nodig.
+`main` staat op de release van `@ifc-lite/wasm@10.4.0` (tag `v10.4.0`, `a8905535c`, sinds 18 oktober 2026; daarvoor `e79f273`). De gepubliceerde WASM hoort bij die commit, dus Rust is niet nodig. Na een upgrade staat de oude WASM nog in `packages/wasm/pkg` en weigert `build:wasm:fetch`; dan eenmalig `node scripts/fetch-prebuilt-wasm.mjs --force`.
 
 ## Werken aan de viewer
 
@@ -23,7 +23,7 @@ Houd wijzigingen in bestanden van ifc-lite klein: elke wijziging moet bij elke u
 
 ## Upgraden
 
-Alleen per major, na review van de changelog, en alleen naar een commit waarvoor `@ifc-lite/wasm` op npm staat:
+Elke maand, en eerder bij een beveiligingsreparatie (audit VIEW-002, besluit Sander 18 oktober 2026), na review van de changelog, en alleen naar een commit waarvoor `@ifc-lite/wasm` op npm staat:
 
 ```sh
 git fetch upstream
@@ -46,16 +46,18 @@ Gewijzigde bestanden van ifc-lite (onder `apps/viewer/src/`):
 - `App.tsx`
 - `main.tsx` (import van `src/bimpeil/fonts.ts`: Material Symbols meegeleverd)
 - `components/viewer/KeyboardShortcutsDialog.tsx`, `KeyboardShortcutsDialogTabs.tsx`
-- `components/viewer/MobileToolbar.tsx`, `ViewerLayout.tsx`, `ViewportContainer.tsx`, `ViewportWelcomeCard.tsx`
+- `components/viewer/MobileToolbar.tsx`, `ViewerLayout.tsx`, `ViewportContainer.tsx`, `ViewportWelcomeCard.tsx` (zonder demo, wolk, telemetrie en privacyregel; de tests `ViewportWelcomeCard.firstRun.test.tsx` en `.privacy.test.tsx` van ifc-lite falen daardoor)
 - `components/viewer/change-sets/ChangeSetPanel.tsx`
 - `components/viewer/dock/FloatingPanel.tsx`
 - `components/viewer/ribbon/RibbonToolbar.tsx`, `ribbon/tabs/FileTab.tsx`
 - `components/viewer/toolbar/useFileCommands.tsx`
-- `components/viewer/IDSPanel.tsx`, `IDSPanelStates.tsx`, `validation/ValidationPanel.empty.tsx` (IDS alleen uit BIMpeil, `src/bimpeil/BimpeilIdsSource.tsx`, vlag en controle in `src/bimpeil/idsOnly.ts`)
+- `components/viewer/IDSPanel.tsx`, `IDSPanelStates.tsx`, `validation/ValidationPanel.empty.tsx` (IDS alleen uit BIMpeil, `src/bimpeil/BimpeilIdsSource.tsx`, vlag en controle in `src/bimpeil/idsOnly.ts`); in `IDSPanel.tsx` ook geen bibliotheek van definities voor IDS (`DefinitionLibraryToolbar`, sinds 10.4.0)
+- `lib/validation/definition-library.ts` met de test `definition-library.test.ts`: de bibliotheek van definities (sinds 10.4.0, in `localStorage`) bewaart geen IDS, alleen eigen regelsets; een IDS uit BIMpeil blijft niet in de browser, zoals een model (VIEW-001)
 - `components/viewer/flow/automation/CheckJobsEditor.tsx`, `lib/flow/check-resources.ts`, en in de test `lib/flow/session-workflow.test.ts` (in Flow een IDS alleen uit BIMpeil)
 - `components/viewer/HierarchyPanel.tsx` en in `components/viewer/hierarchy/`: `types.ts`, `revealGlobalId.ts`, `useHierarchyTree.ts`, `rowSelection.ts`, `useHierarchyTreeKeyboard.ts`, `HierarchyNode.tsx` (indeling per hoofdstuk van de BIM basis ILS, de boom zelf in `src/bimpeil/ilsTree.ts`)
 - `hooks/useLens.ts` (de lens van de classificatieregels: niet bewaard, treffers al uitgerekend in `src/bimpeil/classRulesStore.ts`); de boom per klas (`klassen`) gebruikt dezelfde haken als de ILS indeling hierboven
 - `hooks/useKeyboardShortcuts.ts`, `hooks/usePanelControls.ts`
+- `hooks/useIfcLoader.ts` (geen browsercache voor een model uit BIMpeil, `src/bimpeil/cache.ts`, audit VIEW-001)
 - `hooks/useRailPanelIds.ts`, `components/viewer/ribbon/PanelGroupBrowser.tsx`, `components/viewer/surface-commands-panels.ts` (panelen die BIMpeil niet aanbiedt, nu Bronnen: `src/bimpeil/hiddenPanels.ts`, met daar hoe je het terugdraait), en in de tests `surface-commands-panels.test.ts` en `toolbar/cloud-sources-entrypoints.test.tsx`
 - `i18n/en.ts`
 - `lib/panels/registry.ts`, `lib/panels/renderPanelBody.tsx`
@@ -64,6 +66,8 @@ Gewijzigde bestanden van ifc-lite (onder `apps/viewer/src/`):
 Buiten `src/`: `apps/viewer/index.html` (geen Google Fonts meer) en `apps/viewer/package.json` met `pnpm-lock.yaml` (`material-symbols`, Apache 2.0).
 
 Nieuwe pagina naast de viewer: `apps/viewer/bimpeil-checker.html` met `src/bimpeil/checker/` (controle met een IDS zonder viewer, voor de pagina Controles van BIMpeil; als invoer toegevoegd in de Vite configuratie van BIMpeil, niet in die van ifc-lite).
+
+Tests van ifc-lite die falen door wat BIMpeil anders doet (vergeleken voor en na de upgrade naar 10.4.0, 18 oktober 2026; `viewer:build` draait alleen de tests in `src/bimpeil/`): `ViewportWelcomeCard.firstRun` en `.privacy` (7, geen demo en geen privacyregel), `IDSPanel.audit-gate` en `IDSPanel.i18n` (2, geen IDS van de eigen computer), in `surface-commands-panels.test.ts` het openen van een paneel (panelen zweven altijd, `src/bimpeil/alwaysFloat.ts`) en in `toolbar/cloud-sources-entrypoints.test.tsx` het tabblad File (Bronnen verborgen).
 
 Aanpassingen in bestanden van ifc-lite zijn sinds 7 oktober 2026 gemarkeerd met `BIMpeil:`. Overzicht met `git diff --name-status main bimpeil`.
 

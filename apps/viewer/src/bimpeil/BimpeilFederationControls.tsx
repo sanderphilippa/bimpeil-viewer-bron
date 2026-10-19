@@ -34,6 +34,7 @@ import { ModelTagsCommand } from '@/components/viewer/ModelTagsCommand';
 import { useBimpeilContext, type BimpeilProject } from './context';
 import { bimpeilRefOf, markBimpeilFile, modelForFile } from './origin';
 import { offerChangeSets } from './BimpeilChangeSetActions';
+import { fetchBounded, parseSize } from './boundedFetch';
 
 const EVENT_SAVE = 'ifc-lite:save-federation-setup';
 const EVENT_OPEN = 'ifc-lite:open-federation-setup';
@@ -256,14 +257,13 @@ export function BimpeilFederationControls() {
       }
       setProgress(`Ophalen ${i + 1} van ${available.length}: ${s.fileName}`);
       try {
-        const link = await api<{ url: string }>(
+        const link = await api<{ url: string; size?: number }>(
           `/api/projects/${encodeURIComponent(project.id)}/files/${s.fileId}/versions/${v.id}/download?doel=viewer`,
         );
         if (!link.ok) throw new Error(link.error);
-        const res = await fetch(link.data.url);
-        if (!res.ok) throw new Error(`${res.status}`);
-        const blob = await res.blob();
-        const file = new File([blob], slot.name, { type: blob.type || 'application/x-step' });
+        // Begrensd: hooguit de opgegeven grootte plus een marge (audit 2026-11 SEC-026)
+        const { bytes, type } = await fetchBounded(link.data.url, parseSize(link.data.size));
+        const file = new File([bytes], slot.name, { type: type || 'application/x-step' });
         markBimpeilFile(file, { projectId: project.id, fileId: s.fileId, versionId: v.id, versionNumber: v.number });
         matches.push({ slot, slotIndex: i, file, confidence: v.id === s.saved?.id ? 'content' : 'name-size' });
       } catch {

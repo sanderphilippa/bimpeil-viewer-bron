@@ -6,7 +6,7 @@
  * BIMpeil: modellen openen vanuit de webapp eromheen, zonder de viewer te herladen.
  *
  * De webapp (zelfde origin, iframe op /viewer/) stuurt:
- * - `{ type: 'bimpeil:open', url, name, ref, mode }` met een kortlopende ondertekende URL op /opslag/ en het
+ * - `{ type: 'bimpeil:open', url, name, ref, mode, size }` met een kortlopende ondertekende URL op /opslag/ en het
  *   bestand en de versie in BIMpeil (origin.ts); `mode` 'open' vervangt wat open staat, 'add' (standaard) voegt toe;
  * - `{ type: 'bimpeil:context', project }` met het actieve project, voor het paneel BIMpeil bestanden;
  * - `{ type: 'bimpeil:theme', theme }` met licht of donker voor de hele site (T1);
@@ -14,8 +14,9 @@
  * Toevoegen gaat met dezelfde `addModel` als `?model=`, openen met `loadFile` zoals Openen in IfcLite.
  * De viewer meldt `bimpeil:ready` bij het starten en daarna `bimpeil:opened` of `bimpeil:open-failed`.
  *
- * VEILIGHEID: alleen berichten van dezelfde origin, en alleen URL's op dezelfde origin, net als
- * `?model=` (useModelUrlAutoload).
+ * VEILIGHEID: alleen berichten van dezelfde origin en van de pagina eromheen (`event.source`, audit 2026-11
+ * SEC-035), en alleen URL's op dezelfde origin, net als `?model=` (useModelUrlAutoload). Ophalen stopt bij de
+ * opgegeven grootte `size` plus een marge (boundedFetch.ts, SEC-026).
  */
 
 import { useCallback, useEffect } from 'react';
@@ -30,6 +31,7 @@ import { useBimpeilContext, type BimpeilProject } from './context';
 import { markBimpeilFile, modelForFile, parseModelRef, type BimpeilModelRef } from './origin';
 import { offerChangeSets } from './BimpeilChangeSetActions';
 import { modelForVersion, selectComparison } from './compare';
+import { fetchBounded, parseSize } from './boundedFetch';
 
 const isObject = (data: unknown): data is Record<string, unknown> => !!data && typeof data === 'object';
 
@@ -40,14 +42,14 @@ const isObject = (data: unknown): data is Record<string, unknown> => !!data && t
  */
 export function useBimpeilAddModel(
   mode: 'add' | 'open' = 'add',
-): (url: string, name: string, ref?: BimpeilModelRef | null, options?: { offerChangeSets?: boolean }) => Promise<boolean> {
+): (url: string, name: string, ref?: BimpeilModelRef | null, options?: { offerChangeSets?: boolean; size?: number }) => Promise<boolean> {
   const { loadFile } = useIfcLoader();
   const { addModel } = useIfcFederation(loadFile);
   const { guard: guardWebGpu } = useWebGpuOpenGuard();
   const { t } = useTranslation();
 
   return useCallback(
-    async (url: string, name: string, ref?: BimpeilModelRef | null, options?: { offerChangeSets?: boolean }) => {
+    async (url: string, name: string, ref?: BimpeilModelRef | null, options?: { offerChangeSets?: boolean; size?: number }) => {
       let source: URL;
       try {
         source = new URL(url, window.location.href);
@@ -60,10 +62,9 @@ export function useBimpeilAddModel(
       if (getWebGPUStatus().checking) await retryWebGPU();
       if (!guardWebGpu()) return false;
       try {
-        const res = await fetch(source.href);
-        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-        const blob = await res.blob();
-        const file = new File([blob], name, { type: blob.type || 'application/x-step' });
+        // Begrensd: hooguit de opgegeven grootte plus een marge (SEC-026)
+        const { bytes, type } = await fetchBounded(source.href, options?.size);
+        const file = new File([bytes], name, { type: type || 'application/x-step' });
         if (ref) markBimpeilFile(file, ref);
         if (mode === 'open') await loadFile(file, { kind: 'primary' });
         else await addModel(file);
@@ -93,7 +94,8 @@ export function useBimpeilOpen(): void {
     };
 
     const onMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin || !isObject(event.data)) return;
+      // Alleen de pagina eromheen (SEC-035): ook een ander venster op dezelfde origin niet
+      if (event.origin !== window.location.origin || event.source !== window.parent || !isObject(event.data)) return;
       const data = event.data;
       // Licht of donker uit BIMpeil (T1), voor de hele site
       if (data.type === 'bimpeil:theme') {
@@ -110,13 +112,13 @@ export function useBimpeilOpen(): void {
         const parse = (x: unknown) => {
           if (!isObject(x) || typeof x.url !== 'string') return null;
           const ref = parseModelRef(x.ref);
-          return ref ? { url: x.url, name: typeof x.name === 'string' && x.name ? x.name : 'model.ifc', ref } : null;
+          return ref ? { url: x.url, name: typeof x.name === 'string' && x.name ? x.name : 'model.ifc', ref, size: parseSize(x.size) } : null;
         };
         const base = parse(data.base);
         const head = parse(data.head);
         if (!base || !head) return;
         const ensure = async (m: NonNullable<typeof base>) =>
-          modelForVersion(m.ref.versionId) ?? ((await addFromUrl(m.url, m.name, m.ref, { offerChangeSets: false })) ? modelForVersion(m.ref.versionId) : null);
+          modelForVersion(m.ref.versionId) ?? ((await addFromUrl(m.url, m.name, m.ref, { offerChangeSets: false, size: m.size })) ? modelForVersion(m.ref.versionId) : null);
         void (async () => {
           const a = await ensure(base);
           const b = a ? await ensure(head) : null;
@@ -129,7 +131,7 @@ export function useBimpeilOpen(): void {
       const name = typeof data.name === 'string' && data.name ? data.name : 'model.ifc';
       // Openen vervangt wat open staat, Toevoegen zet het ernaast; zonder mode (oudere webapp) toevoegen
       const load = data.mode === 'open' ? openFromUrl : addFromUrl;
-      void load(data.url, name, parseModelRef(data.ref)).then((ok) => reply(ok ? { type: 'bimpeil:opened', name } : { type: 'bimpeil:open-failed', name }));
+      void load(data.url, name, parseModelRef(data.ref), { size: parseSize(data.size) }).then((ok) => reply(ok ? { type: 'bimpeil:opened', name } : { type: 'bimpeil:open-failed', name }));
     };
 
     window.addEventListener('message', onMessage);

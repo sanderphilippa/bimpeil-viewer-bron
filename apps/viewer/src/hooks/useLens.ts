@@ -179,7 +179,12 @@ export function useLens(): void {
     };
 
     if (activeLens.autoColor) {
-      applyResult(evaluateAutoColorLens(activeLens.autoColor, provider));
+      try { applyResult(evaluateAutoColorLens(activeLens.autoColor, provider, activeLens.capturedScope)); }
+      catch (error) {
+        clearLensOutput();
+        console.error('[useLens] Auto-color evaluation failed:', error);
+        toast.error(error instanceof Error ? error.message : 'Could not apply this lens.');
+      }
       return;
     }
 
@@ -203,7 +208,8 @@ export function useLens(): void {
     }).catch((error: unknown) => {
       if (controller.signal.aborted) return;
       console.error('[useLens] FilterGroup evaluation failed:', error);
-      toast.error('Could not apply this lens.');
+      clearLensOutput();
+      toast.error(error instanceof Error ? error.message : 'Could not apply this lens.');
     });
     return () => controller.abort();
   }, [activeLensId, activeLens, modelSetKey, mutationVersion, bimpeilClassLens]); // BIMpeil: bimpeilClassLens

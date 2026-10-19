@@ -26,6 +26,9 @@ export function markBimpeilFile(file: File, ref: BimpeilModelRef): void {
   refs.set(file, ref);
 }
 
+/** Komt dit bestand uit BIMpeil? Dan geen browsercache (cache.ts, audit VIEW-001) */
+export const isBimpeilFile = (file: File): boolean => refs.has(file);
+
 /** Het open model dat met dit bestand geladen is */
 export function modelForFile(file: File): FederatedModel | null {
   const models = Array.from(useViewerStore.getState().models.values()) as FederatedModel[];

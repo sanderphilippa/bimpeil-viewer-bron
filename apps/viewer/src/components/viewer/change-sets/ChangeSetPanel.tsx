@@ -26,6 +26,7 @@ import {
 } from '@/lib/change-sets/change-set-actions';
 import { ChangeSetContents } from './ChangeSetContents';
 import { BimpeilChangeSetOpen, BimpeilChangeSetSave } from '@/bimpeil/BimpeilChangeSetActions';
+import { AssistantAction } from '../assistant/AssistantAction';
 
 export function ChangeSetPanel({ onClose }: { onClose?: () => void }) {
   const { t } = useTranslation();
@@ -64,6 +65,7 @@ export function ChangeSetPanel({ onClose }: { onClose?: () => void }) {
         <GitBranch className="h-4 w-4" aria-hidden="true" />
         <h2 className="flex-1 text-sm font-medium">{t('changeSets.panel.title')}</h2>
         <span className="text-xs text-muted-foreground">{t('changeSets.panel.count', { count: rows.length })}</span>
+        <AssistantAction />
         {onClose && <IconButton label={t('changeSets.panel.close')} className="h-6 w-6" onClick={onClose}><X className="h-3.5 w-3.5" /></IconButton>}
       </div>
       <div className="flex items-center gap-2 border-b px-3 py-2">

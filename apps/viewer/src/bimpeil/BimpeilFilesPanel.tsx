@@ -26,6 +26,7 @@ import { useBimpeilAddModel } from './useBimpeilOpen';
 import { requestLocalFiles } from './localFiles';
 import { bimpeilRefOf, markBimpeilFile } from './origin';
 import { uploadToBimpeil, type ViewerUpload } from './upload';
+import { parseSize } from './boundedFetch';
 
 interface FileVersion {
   id: string;
@@ -123,13 +124,16 @@ export function BimpeilFilesPanel({ onClose }: { onClose?: () => void }) {
     setBusy(file.id);
     setError(null);
     const r = await fetch(`/api/projects/${encodeURIComponent(project.id)}/files/${file.id}/versions/${version.id}/download?doel=viewer`);
-    const data = (await r.json().catch(() => ({}))) as { url?: string; error?: string };
+    const data = (await r.json().catch(() => ({}))) as { url?: string; size?: number; error?: string };
     if (!r.ok || !data.url) {
       setError(data.error ?? 'Openen is mislukt.');
       setBusy(null);
       return;
     }
-    await (mode === 'open' ? openFromUrl : addFromUrl)(data.url, file.name, { projectId: project.id, fileId: file.id, versionId: version.id, versionNumber: version.number });
+    await (mode === 'open' ? openFromUrl : addFromUrl)(data.url, file.name, { projectId: project.id, fileId: file.id, versionId: version.id, versionNumber: version.number }, {
+      // Begrensd ophalen (audit 2026-11 SEC-026)
+      size: parseSize(data.size),
+    });
     setBusy(null);
   }
 

@@ -587,6 +587,60 @@ Returns pass/fail summary with exit code 0 (pass) or 1 (fail).
 | `--json` | Full validation report as JSON |
 | `--locale <lang>` | Message language: `en`, `de`, `fr` |
 
+#### IDS authoring subcommands
+
+The same command also checks, formats, compares and explains IDS files on their own, with the
+engines the IDS editor uses (`@ifc-lite/ids` audit, `@ifc-lite/ids-authoring`
+lint). No model is needed.
+
+```bash
+# Is this a valid IDS 1.0 file? (XSD shape, IFC names, restriction coherence)
+ifc-lite ids audit requirements.ids
+ifc-lite ids audit requirements.ids --json
+
+# Does it mean what the author intends? (43 IDSL-* rules)
+ifc-lite ids lint requirements.ids
+ifc-lite ids lint requirements.ids --rules IDSL-PROP-001,IDSL-VAL-001
+ifc-lite ids lint requirements.ids --severity IDSL-SPEC-008=off --fail-on warning
+
+# Canonical formatting, for readable git diffs
+ifc-lite ids fmt requirements.ids            # formatted XML to stdout
+ifc-lite ids fmt requirements.ids --check    # CI: exit 1 when the file would change
+ifc-lite ids fmt requirements.ids --write    # rewrite in place
+
+# What changed between two revisions? (exit 1 when they differ)
+ifc-lite ids diff rev-a.ids rev-b.ids
+ifc-lite ids diff rev-a.ids rev-b.ids --md > CHANGES.md
+
+# Read it in plain language
+ifc-lite ids explain requirements.ids --lang de --md
+```
+
+| Subcommand | Flags | Exit code |
+|------------|-------|-----------|
+| `audit <rules.ids>` | `--json` | 1 when the audit reports an error |
+| `lint <rules.ids>` | `--json`, `--rules C,…` (only these rules), `--severity C=error\|warning\|info\|off,…` (override per rule), `--fail-on error\|warning\|info\|never` (default `error`) | 1 when a diagnostic at or above `--fail-on` remains |
+| `fmt <rules.ids>` | `--check`, `--write` | 1 when `--check` finds a file that would change |
+| `diff <before.ids> <after.ids>` | `--json`, `--md` | 1 when the documents differ |
+| `explain <rules.ids>` | `--lang en\|de\|fr`, `--md` | 0 |
+
+Every subcommand exits **2** on a usage error, an unreadable or unparseable
+file, or a file this build cannot write without loss. `fmt` re-reads what it
+writes and refuses (exit 2, naming the values) instead of dropping content:
+the writer in this release does not yet carry some `info` fields (author,
+version, date, …) or length, digit and conjunctive restrictions.
+
+`diff` pairs specifications by identifier, then by name and applicability,
+then by similarity, and facets the same way inside a pair. A renamed
+specification or an edited requirement therefore reads as one change, not as
+a removal plus an addition.
+
+Lint output names each finding by its XML path, e.g.
+`specifications[0].requirements[0].baseName`, and marks findings that have a
+quick fix. Apply quick fixes in the IDS editor or through the MCP
+`ids_apply_ops` tool; the CLI never rewrites content on its own. Model-aware
+lint (`--model`) is not available yet.
+
 ---
 
 ### `bcf` — BCF Collaboration
@@ -1453,11 +1507,30 @@ ifc-lite flow validate audit.flow.json
 |------------|---------|
 | `run <graph> <file.ifc>` | Evaluate the graph. `--input <nodeId.param=value>` (repeatable; JSON values parse, others are strings), `--out <file>` (IFC with the run's mutations applied), `--tracking <file>` / `--no-tracking` (element sets of tracked creation nodes; default `<graph>.tracking.json` beside the graph), `--json` |
 | `describe <graph>` | Print declared inputs (with param defaults) and outputs (with value kind and access). `--json` |
+| `run ... --checkpoint <file>` | A graph with AI nodes pauses for review: the run saves a review checkpoint to `<file>`, prints the proposal and its digest, and exits **3**. A run that wrote to the model or opened a different model before pausing also needs `--out`; the resume must start from that file. `--ai-max-requests` / `--ai-max-output-tokens` set the run's AI root budget (default 12 requests, 24,000 output tokens) |
+| `review <checkpoint> --approve <digest>` / `--reject` | Approve exactly the proposal that was shown (the digest must match) or decline it. Without a flag it prints the checkpoint. `--json` |
+| `resume <graph> <file.ifc> --checkpoint <file>` | Claim an approved checkpoint once, check that the graph, `--input` values and model are the ones the pause recorded, restore every completed node without running it again (no AI request is sent for the reviewed proposal), and run what was paused. `--out`, `--next-checkpoint <file>` when the graph pauses again |
 | `validate <graph>` | Validate the document's wiring against the node registry (unknown types, missing ports, type-incompatible edges, unconnected required inputs, `inputs`/`outputs` markers that name nothing) and report each node as `ok`, `noop`, `unavailable` or `unknown` on this host. Exit 2 on any wiring problem or unrunnable node. `--json` |
 
 `run` exits 1 when any node failed; per-lane errors inside a lifted node do not fail the run
 (the lane yields `null`) and are listed under `errors` in the summary. Secrets are resolved from
 environment variables; a node that requires one the host lacks is reported as `unavailable`.
+
+AI nodes (`ai.classify`, `ai.summarize`, `ai.extract`) run only when the environment names an
+OpenAI-compatible provider: `IFC_LITE_AI_MODEL` and `IFC_LITE_AI_API_KEY` (and optionally
+`IFC_LITE_AI_BASE_URL`, default OpenRouter). `IFC_LITE_AI_STRUCTURED_OUTPUT=true`
+enables JSON Schema requests for a compatible upstream model; `false` disables
+them. Only the exact `https://api.openai.com/v1` endpoint defaults to enabled;
+other endpoints default to parser-only. These settings also apply to MCP.
+Without the required model and key the graph is refused before the model is
+opened. The key never appears in output or in a checkpoint.
+
+```bash
+ifc-lite flow run roles.flow.json model.ifc --checkpoint roles.checkpoint.json   # exit 3: paused for review
+ifc-lite flow review roles.checkpoint.json                                       # print the proposal and its digest
+ifc-lite flow review roles.checkpoint.json --approve <digest>
+ifc-lite flow resume roles.flow.json model.ifc --checkpoint roles.checkpoint.json --out roles.ifc
+```
 
 A graph with a tracked creation node (`model.addElement`) re-run on its own output updates the
 elements it made — same GlobalIds, changed geometry — and removes the ones whose lanes vanished:
@@ -1574,6 +1647,8 @@ Run `ifc-lite schema` to see the full API before writing eval expressions.
 
 ## Command Reference
 
+The `semantic` command reads JSON/SPARQL providers, generates shared profile artifacts, validates JSON or RDF, and operates an authenticated HTTPS relay. See [Headless semantic records](semantic-headless.md) for flags, result formats, credential references, and reproduction examples.
+
 <!-- BEGIN GENERATED: cli-commands -->
 | Command | Description |
 |---------|-------------|
@@ -1585,7 +1660,7 @@ Run `ifc-lite schema` to see the full API before writing eval expressions.
 | `diagnose-geometry` | CSG / opening diagnostics (failures, classification) |
 | `extract-entities` | Isolate entities into a small, viewable standalone IFC |
 | `anonymize` | Export selected objects + context as an anonymized IFC |
-| `ids` | Validate against IDS rules |
+| `ids` | Validate a model against IDS rules; audit, lint, format, diff and explain IDS files |
 | `bcf` | Work with BCF collaboration files |
 | `clash` | Detect geometric clashes between elements |
 | `create` | Create IFC elements (29 types) |
@@ -1613,5 +1688,6 @@ Run `ifc-lite schema` to see the full API before writing eval expressions.
 | `gym` | reset/step/reward environment loop (JSONL over stdin/stdout) |
 | `delivery` | Repeatable delivery check (structural + IDS + rule sets) from a saved recipe |
 | `check` | Run a .rules.json information-validation rule set (same engine as the viewer) |
-| `flow` | Evaluate a node graph headlessly |
+| `semantic` | Shared semantic profiles, SHACL and JSON/SPARQL providers |
+| `flow` | Evaluate a node graph headlessly; pause and resume reviewed AI proposals |
 <!-- END GENERATED: cli-commands -->

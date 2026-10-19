@@ -14,6 +14,7 @@
  * reads as `'ids'` and the document format version stays the same.
  */
 
+import { validateSavedValidationElements, type SavedValidationElements } from '../validation/reports/element-evidence';
 import { validateBlockTitle, type BlockTitle } from './block-title.js';
 import type { DocumentValidationError } from './types.js';
 import { validateReportProvenance, type ReportProvenance } from './report-provenance.js';
@@ -100,8 +101,17 @@ export interface IdsReportBlock extends ReportProvenance, BlockTitle {
   id: string;
   /** Layout (#6470). Absent in documents saved before it existed, which keep printing the original layout (one truncated line per field) until the author picks one. */
   variant?: IdsReportVariant;
+  /**
+   * Compact layout only (#6560): print one bar row per specification and leave out its
+   * requirement rows. Optional and additive, so the document format version is unchanged;
+   * a viewer that supports the document format but predates this field ignores it
+   * and prints the full compact report.
+   */
+  specificationsOnly?: boolean;
   /** Optional ring benchmark (#6552). Absent retains existing document output. */
   benchmarks?: boolean;
+  /** Whole-block size, 0.5-2 (#6548); absent is 1. */
+  scale?: number;
   /** Which engine produced the snapshot (#6372). Absent means `'ids'`: every block saved before this field existed was labelled IDS. */
   sourceKind?: ReportSourceKind;
   /** IDS document title, or rule-set name, printed in the block's heading. */
@@ -111,6 +121,8 @@ export interface IdsReportBlock extends ReportProvenance, BlockTitle {
   /** `failed` excludes warning-severity failures, which `warnings` counts (#6372; absent on IDS snapshots). */
   summary: { checked: number; passed: number; failed: number; passRate: number; warnings?: number };
   checks: IdsReportCheckSummary[];
+  /** Optional immutable element failures; absent in older count-only snapshots (#7091). */
+  elementEvidence?: SavedValidationElements;
 }
 
 /** The source a report block was snapshotted from; a block saved before #6372 has none and is IDS. */
@@ -146,12 +158,14 @@ function validateCheckExtras(check: Record<string, unknown>, checkAt: string, er
 /** Structural check of a report block (#5125, #6372): a finite, non-negative count and a 0-100 pass rate at both the block and every check. */
 export function validateIdsReportBlock(block: Record<string, unknown>, at: string, errors: DocumentValidationError[]): void {
   validateReportProvenance(block, at, errors);
+  if (block.elementEvidence !== undefined) validateSavedValidationElements(block.elementEvidence, `${at}.elementEvidence`, errors);
   validateBlockTitle(block, at, errors);
   if (block.sourceKind !== undefined && block.sourceKind !== 'ids' && block.sourceKind !== 'rules') errors.push({ path: `${at}.sourceKind`, message: 'expected ids | rules' });
   if (!isString(block.sourceName)) errors.push({ path: `${at}.sourceName`, message: 'expected a string' });
   if (!isString(block.generatedAt)) errors.push({ path: `${at}.generatedAt`, message: 'expected a string' });
   if (block.variant !== undefined && !IDS_REPORT_VARIANTS.includes(block.variant as IdsReportVariant)) errors.push({ path: `${at}.variant`, message: `expected ${IDS_REPORT_VARIANTS.join(' | ')}` });
   if (block.benchmarks !== undefined && typeof block.benchmarks !== 'boolean') errors.push({ path: `${at}.benchmarks`, message: 'expected a boolean' });
+  if (block.specificationsOnly !== undefined && typeof block.specificationsOnly !== 'boolean') errors.push({ path: `${at}.specificationsOnly`, message: 'expected a boolean' });
   const summary = block.summary;
   if (!isRecord(summary) || !isCount(summary.checked) || !isCount(summary.passed) || !isCount(summary.failed) || !isRate(summary.passRate)
     || (summary.warnings !== undefined && !isCount(summary.warnings))) {

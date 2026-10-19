@@ -109,9 +109,8 @@ test('the REAL test.yml derives the lane names the REAL rollup publishes', () =>
     // #6361: the smoke lane is two file shards, each a distinct check run.
     'Viewer E2E smoke (1/2)',
     'Viewer E2E smoke (2/2)',
-    'Viewer tests (shard 0)',
-    'Viewer tests (shard 3)',
-    'Viewer tests (shard 7)',
+    // #7360: every expanded context remains required at sixteen shards.
+    ...Array.from({ length: 16 }, (_, index) => `Viewer tests (shard ${index})`),
     'Docs checks (docs-only PRs)',
     // #4912: the strict docs site build, on every PR touching docs.
     'Docs site build (mkdocs --strict)',
@@ -120,10 +119,14 @@ test('the REAL test.yml derives the lane names the REAL rollup publishes', () =>
     'Build + WASM + Rust + Node',
     // #3878: the two CSG accept gates are feature builds nothing else compiles.
     'CSG accept gates (feature builds)',
+    // #6959: the perf-ratchet gate, judging the measurement `build` uploads.
+    'Perf ratchet ceilings',
+    // #6982: the callgrind measurement the perf-ratchet gate judges.
+    'Native instruction counts',
   ]) {
     assert.ok(names.includes(observed), `derived set is missing the observed lane "${observed}"`);
   }
-  assert.equal(names.length, 28);
+  assert.equal(names.length, 38);
 });
 
 test('FAIL CLOSED: an empty workflow file is NO_WORKFLOW_TEXT, not an empty lane set', () => {
@@ -262,7 +265,7 @@ test('the REAL test.yml maps every viewer shard to the template the REAL rollup 
   const aliases = matrixSkipAliases(
     readFileSync(join(REPO_ROOT, '.github/workflows/test.yml'), 'utf8'),
   );
-  for (const shard of [0, 1, 2, 3, 4, 5, 6, 7]) {
+  for (const shard of Array.from({ length: 16 }, (_, index) => index)) {
     assert.equal(
       aliases.get(`Viewer tests (shard ${shard})`),
       MATRIX_TEMPLATE,
@@ -297,7 +300,7 @@ test('`excludeJobKeys` must reach BOTH derivations, or the alias map stops cover
 
   // Asymmetric: excluding the job from the ALIASES only puts the shards back.
   const asymmetric = missingLanes(required, PR3581_ROLLUP, matrixSkipAliases(wf, { exclude: [...exclude, 'viewer-tests'] }));
-  for (const shard of [0, 1, 2, 3, 4, 5, 6, 7]) {
+  for (const shard of Array.from({ length: 16 }, (_, index) => index)) {
     assert.ok(asymmetric.includes(`Viewer tests (shard ${shard})`), `shard ${shard} uncovered`);
   }
 });

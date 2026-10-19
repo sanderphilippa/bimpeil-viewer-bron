@@ -15,6 +15,7 @@
  */
 import { parseIDS } from '@ifc-lite/ids';
 import type { CheckWorkerRequest, CheckWorkerResponse } from './check.worker';
+import { parseSize, readBounded, readLimit } from '../boundedFetch';
 
 type Phase = 'downloaden' | 'inlezen' | 'controleren';
 
@@ -25,9 +26,29 @@ const progress = (id: string, phase: Phase, percentage: number, detail?: string)
 
 let worker: Worker | null = null;
 let current: string | null = null;
+/** De download van de lopende controle; afbreken stopt hem (audit VIEW-004) */
+let downloading: AbortController | null = null;
+
+/**
+ * De worker stopte zonder antwoord (audit VIEW-004): een fout of te weinig geheugen. Zonder dit bleef BIMpeil eindeloos
+ * op "controleren" staan. De volgende controle krijgt een nieuwe worker.
+ */
+function workerLost(message: string) {
+  worker?.terminate();
+  worker = null;
+  if (current === null) return;
+  const id = current;
+  current = null;
+  toParent({ type: 'bimpeil:check-failed', id, message });
+}
 
 function newWorker(): Worker {
   const w = new Worker(new URL('./check.worker.ts', import.meta.url), { type: 'module' });
+  w.onerror = (event) => {
+    event.preventDefault();
+    workerLost('De controle stopte onverwacht, mogelijk door te weinig geheugen voor dit model.');
+  };
+  w.onmessageerror = () => workerLost('De controle kon haar uitkomst niet doorgeven.');
   w.onmessage = (event: MessageEvent<CheckWorkerResponse>) => {
     const msg = event.data;
     if (msg.id !== current) return;
@@ -50,39 +71,31 @@ function sameOrigin(url: string): boolean {
   return new URL(url, location.href).origin === location.origin;
 }
 
-/** Een bestand ophalen met voortgang in procenten (als de lengte bekend is) */
-async function download(id: string, url: string): Promise<ArrayBuffer> {
-  const res = await fetch(url);
+/**
+ * Een bestand ophalen met voortgang in procenten; stopt bij de opgegeven grootte plus een marge (audit 2026-11
+ * SEC-026). Met de grootte uit BIMpeil is de voortgang op de uitgepakte grootte; anders op de lengte van de download
+ */
+async function download(id: string, url: string, size: number | undefined, signal: AbortSignal): Promise<ArrayBuffer> {
+  const res = await fetch(url, { signal });
   if (!res.ok || !res.body) throw new Error(`Het model kon niet opgehaald worden (${res.status})`);
-  const total = Number(res.headers.get('content-length') ?? 0);
-  const reader = res.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let received = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    received += value.byteLength;
+  const total = size ?? Number(res.headers.get('content-length') ?? 0);
+  const bytes = await readBounded(res.body.getReader(), readLimit(size), (received) => {
     // Een gecomprimeerde download meldt de gecomprimeerde lengte: hooguit 100
     if (total > 0) progress(id, 'downloaden', Math.min(100, (received / total) * 100));
-  }
-  const out = new Uint8Array(received);
-  let at = 0;
-  for (const c of chunks) {
-    out.set(c, at);
-    at += c.byteLength;
-  }
-  return out.buffer;
+  });
+  return bytes.buffer;
 }
 
-async function check(id: string, ifcUrl: string, idsUrl: string) {
+async function check(id: string, ifcUrl: string, idsUrl: string, ifcSize: number | undefined) {
   try {
     if (!sameOrigin(ifcUrl) || !sameOrigin(idsUrl)) throw new Error('Onverwacht adres voor het model of de IDS');
     const idsRes = await fetch(idsUrl);
     if (!idsRes.ok) throw new Error(`De IDS kon niet opgehaald worden (${idsRes.status})`);
     const document = parseIDS(await idsRes.text());
     progress(id, 'downloaden', 0);
-    const buffer = await download(id, ifcUrl);
+    downloading = new AbortController();
+    const buffer = await download(id, ifcUrl, ifcSize, downloading.signal);
+    downloading = null;
     if (current !== id) return;
     worker ??= newWorker();
     const request: CheckWorkerRequest = { type: 'check', id, buffer, document };
@@ -97,13 +110,15 @@ async function check(id: string, ifcUrl: string, idsUrl: string) {
 
 window.addEventListener('message', (event: MessageEvent) => {
   if (event.origin !== parentOrigin || event.source !== window.parent) return;
-  const data = event.data as { type?: string; id?: string; ifcUrl?: string; idsUrl?: string };
+  const data = event.data as { type?: string; id?: string; ifcUrl?: string; idsUrl?: string; ifcSize?: unknown };
   if (data?.type === 'bimpeil:check' && data.id && data.ifcUrl && data.idsUrl) {
     current = data.id;
-    void check(data.id, data.ifcUrl, data.idsUrl);
+    void check(data.id, data.ifcUrl, data.idsUrl, parseSize(data.ifcSize));
   } else if (data?.type === 'bimpeil:check-cancel' && data.id === current) {
-    // Afbreken: de worker stoppen; de volgende controle krijgt een nieuwe
+    // Afbreken: de download en de worker stoppen; de volgende controle krijgt een nieuwe
     current = null;
+    downloading?.abort();
+    downloading = null;
     worker?.terminate();
     worker = null;
   }

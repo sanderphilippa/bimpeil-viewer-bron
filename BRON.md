@@ -6,11 +6,13 @@ Elke versie die BIMpeil gebruikt, staat hier als één commit met een tag `viewe
 
 | | |
 | --- | --- |
-| Tag | `viewer-ceeacb5c3` |
-| IfcLite | `@ifc-lite/renderer@6.0.1` (commit `e79f27342beb01a6f30d9b63c44795ecd118f4de`) |
-| @ifc-lite/wasm | `10.3.0` |
+| Tag | `viewer-61b5c3709` |
+| IfcLite | `@ifc-lite/wasm@10.4.0` (commit `a8905535c861ca42e69f33ee8be138dea5c828b2`) |
+| @ifc-lite/wasm | `10.4.0` |
 
 De aanpassingen van BIMpeil staan in `apps/viewer/src/bimpeil/` en zijn in bestanden van IfcLite gemarkeerd met `BIMpeil:`; de lijst staat in `BIMPEIL.md`.
+
+De map `.github` van IfcLite (hun workflows en Dependabot) staat hier niet in: die hoort bij hun eigen ontwikkeling, niet bij de broncode van de viewer. Bijdragen en issues horen bij [IfcLite](https://github.com/LTplus-AG/ifc-lite); deze repo neemt geen pull requests aan.
 
 ---
 

@@ -19,7 +19,7 @@ The `bim` object (a `BimContext`) groups its capabilities into namespaces, plus 
 | `bim.clash` | Run clash rules and the discipline matrix |
 | `bim.cost` | Read and evaluate IFC 5D cost schedules, items, values, and quantities |
 | `bim.structural` | Read-only access to IFC structural analysis data (analysis models, members, connections, activities, load/result groups) |
-| `bim.ids` | IDS validation |
+| `bim.ids` | IDS validation; `bim.ids.authoring` opens, edits (through grounded operations), lints and writes IDS documents |
 | `bim.bcf` | BCF topics, comments, viewpoints |
 | `bim.files`, `bim.schedule`, `bim.spatial`, `bim.spaces`, `bim.drawing`, `bim.list`, `bim.bsdd`, `bim.events`, `bim.sandbox` | Supporting namespaces (file access, scheduling, spatial ops, space program, 2D drawings, entity tables, bSDD lookups, events, sandboxed sub-scripts) |
 
@@ -38,6 +38,55 @@ for (const s of storeys) {
   console.log(`${s.name}: ${bim.contains(s.ref).length} elements`);
 }
 ```
+
+### Authoring IDS from a script
+
+`bim.ids.authoring` edits IDS documents with the typed operations and
+grounding gate that the IDS editor and the MCP `ids_apply_ops` tool use (see
+[Writing IDS documents](ids.md#writing-ids-documents)). A batch that names an entity, property
+set or property the IFC schema does not have is refused as a whole. The
+result lists each problem with ranked candidates. Accepted batches can be
+undone.
+
+```ts
+declare const xml: string;
+const doc = await bim.ids.authoring.open(xml);
+const specId = doc.doc.nodes.specs[0].id;
+
+const res = doc.apply([
+  {
+    kind: 'facet.add',
+    opId: crypto.randomUUID(),
+    payload: {
+      specId,
+      section: 'requirements',
+      facetId: crypto.randomUUID(),
+      facet: {
+        type: 'property',
+        propertySet: { kind: 'equals', value: 'Pset_DoorCommon' },
+        baseName: { kind: 'equals', value: 'FireRatng' },
+      },
+    },
+  },
+]);
+if (!res.ok) console.log(res.errors[0].code, res.errors[0].candidates[0]?.value); // GATE-PROP-001 FireRating
+
+for (const d of doc.lint()) console.log(d.code, doc.pathOf(d.nodeId), d.message);
+const updated: string = doc.write(); // throws, with the reason, if the writer refuses the document
+```
+
+## Explicit property declarations
+
+The SDK's `bim.mutate.setProperty(ref, psetName, propName, value, dataType?)` accepts an optional IFC `IfcValue` defined type. Use the EXPRESS name, for example `IfcThermalTransmittanceMeasure` or `IfcLabel`. The shared schema registry validates membership, scalar value compatibility, declared numeric domains, and string width before writing. Invalid or unknown declarations throw; an integer JavaScript value can still declare a real-valued IFC measure.
+
+```js
+const wall = bim.query().byType('IfcWall').toArray()[0];
+if (wall) {
+  bim.mutate.setProperty(wall.ref, 'Pset_WallCommon', 'ThermalTransmittance', 1, 'IfcThermalTransmittanceMeasure');
+}
+```
+
+The declaration survives the effective property overlay, collaboration mirror/peer application, and IFC export/reimport. Without `dataType`, the existing string/boolean/integer/real inference remains unchanged. This optional argument belongs to the direct SDK and CLI `eval`/`run` API; the sandbox script bridge retains its existing four-argument contract.
 
 ## Running scripts from the CLI
 
@@ -227,3 +276,54 @@ text. Supplying an `.ifc` download filename automatically changes it to
 `.ifczip` with ZIP MIME type. Untextured exports retain their ordinary STEP
 content. This packaging belongs to the web viewer adapter; other SDK backends
 provide their own resource packaging.
+
+### Canonical structural profiles
+
+Sandbox `bim.store.addColumn`, `addBeam` and `addMember` accept the same
+parameterized `Profile` union as the typed SDK. A supplied `Profile` replaces
+the rectangular Width/Depth or Width/Height inputs; column Height and element
+placement remain required. Profile dimensions keep their IFC names and use
+metres. The shared builder validates the actual profile before committing.
+Ordinary creation through the viewer SDK records the complete authored graph,
+so one Undo removes auxiliary placement, profile and containment records too.
+
+### Align loaded elements
+
+`await bim.store.alignElements(modelId, reference, targets, mode)` aligns current
+native mesh edges or centres in one storey workplane. Modes are `left`, `centre`,
+`right`, `top`, `middle` and `bottom`. It derives bounds from fresh owning-model
+geometry and records one atomic Undo batch. A selected host governs its placement dependants, which move once, and
+joined neighbours follow. Stale geometry, unavailable native geometry, unsafe
+shared placements, incompatible hosted/joined shifts, or a reference that would
+move with a target refuse without partial IFC writes. Supply the owning model
+ID when federated; lengths are IFC storey-local metres.
+
+### Generic groups
+
+`bim.store.addGroup`, `readGroup`, `updateGroup`, and `removeGroup` author exact
+`IfcGroup` records in IFC4/IFC4X3. Each member pins its owning `modelId`, native
+`expressId`, and current `GlobalId`. Pass the complete intended `RelatedObjects`
+list on every create/update; an explicit `[]` clears membership. An update or
+delete also requires the complete current snapshot returned by `readGroup`.
+
+```ts
+import type { BimContext, GroupStoreIdentity } from '@ifc-lite/sdk';
+
+function createInspectionGroup(bim: BimContext, member: GroupStoreIdentity) {
+  const group = bim.store.addGroup(member.modelId, {
+    Name: 'Inspection group', RelatedObjects: [member],
+  });
+  const expected = bim.store.readGroup(group);
+  bim.store.updateGroup(expected, {
+    Description: 'Ready for inspection', RelatedObjects: [member],
+  });
+  return group;
+}
+```
+
+Updates preserve the group and reuse an existing exact membership relationship.
+Deleting a group preserves its member objects and other group memberships;
+shared incoming memberships are rewritten safely. Other incoming dependencies,
+ambiguous/deleted identities, specialized assignment semantics, and exceeded
+graph budgets refuse the whole edit. The viewer records one native Undo batch.
+Specialized Structural groups retain their separate authoring methods.

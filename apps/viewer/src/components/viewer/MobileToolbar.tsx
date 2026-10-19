@@ -8,7 +8,7 @@
  * and secondary actions in an overflow menu.
  */
 
-import React, { useRef, useCallback, useMemo } from 'react';
+import React, { useRef, useCallback, useMemo, useState } from 'react';
 import { openBimpeilFiles, useBimpeilLocalFiles } from '@/bimpeil/localFiles';
 import { Download, MoreHorizontal } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
@@ -35,9 +35,11 @@ import { reportFileOpenRejected } from '@/hooks/ingest/fileOpenRejected';
 import { MOBILE_FILE_ACCEPT, isSupportedMobileModelFile } from '@/services/supported-model-files';
 import { surfaceCommand, type SurfaceCommandDefinition, type SurfaceCommandId } from './surface-commands';
 import { runSurfaceCommand, trackCommandExecution } from './surface-command-run';
+import { ActivityTrayDialog } from './activity/ActivityTray';
 
 export function MobileToolbar() {
   const { t } = useTranslation();
+  const [activityOpen, setActivityOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const addModelInputRef = useRef<HTMLInputElement>(null);
   const {
@@ -112,6 +114,8 @@ export function MobileToolbar() {
   const toolButtons = ['tool:select', 'tool:measure', 'tool:section'] as const;
   const quickActions = ['view:home', 'view:fit', 'vis:show'] as const;
   const walk = mobileCommand('tool:walk');
+  const activity = mobileCommand('ui:activity');
+  const ActivityIcon = mobileIcon(activity);
   const WalkIcon = mobileIcon(walk);
   const menuItem = (id: SurfaceCommandId, disabled = false) => {
     const command = mobileCommand(id);
@@ -295,11 +299,18 @@ export function MobileToolbar() {
 
           <DropdownMenuSeparator />
 
+          {/* The activity tray lives in the status bar, which phones do not show (#6925). */}
+          <DropdownMenuItem data-command-id={activity.id} onClick={() => runSurfaceCommand(activity, { surface: 'mobile', openActivity: () => setActivityOpen(true) })}>
+            <ActivityIcon className="h-4 w-4 mr-2" />
+            {mobileLabel(activity)}
+          </DropdownMenuItem>
+
           {/* Theme */}
           {/* BIMpeil: no theme toggle; set in BIMpeil */}
         </DropdownMenuContent>
       </DropdownMenu>
       {exportDialog}
+      <ActivityTrayDialog open={activityOpen} onOpenChange={setActivityOpen} />
     </div>
   );
 }

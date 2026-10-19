@@ -12,7 +12,7 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { parseIDS, validateIDS, createTranslationService, type IDSValidationReport, type IFCDataAccessor, type SupportedLocale } from '@ifc-lite/ids';
+import { parseIDS, validateIDS, createTranslationService, type IDSValidationReport, type SupportedLocale } from '@ifc-lite/ids';
 import { IFC_ENTITY_NAMES, iterateEffectiveEntities } from '@ifc-lite/data';
 import { getInheritanceChainAcrossSchemas } from '@ifc-lite/parser';
 import { foldedTypeCounts, pendingMutationsField, pendingOverlay, stepText } from '../overlay.js';
@@ -20,7 +20,7 @@ import { effectiveSourceIds, pendingEntityMembership } from '../effective-entity
 import { isProductType } from '../backend-query.js';
 import { EntityNode } from '@ifc-lite/query';
 import type { Tool } from './types.js';
-import { okResult, resolveModel } from './util.js';
+import { fmtInt, okResult, resolveModel } from './util.js';
 import { ToolErrorCode, ToolExecutionError } from '../errors.js';
 import { resolveSafePath } from '../safe-path.js';
 import type { ToolContext } from '../context.js';
@@ -50,7 +50,7 @@ const idsValidate: Tool = {
     // call (built lazily, #4857's pattern); `buildIdsAccessor` passes
     // `undefined` on to `createDataAccessor` for that same-shape null, which
     // is the byte-identical no-visibility-view path (#5184).
-    const accessor = buildIdsAccessor(m.store, m.backend.getMutationView() ?? undefined) as IFCDataAccessor;
+    const accessor = buildIdsAccessor(m.store, m.backend.getMutationView() ?? undefined);
     const locale = (input.locale as SupportedLocale | undefined) ?? 'en';
     const report = await validateIDS(
       idsDoc,
@@ -79,7 +79,7 @@ const idsValidate: Tool = {
  * the previous arrangement let `ids_explain` read arbitrary paths in
  * restricted stdio deployments.
  */
-async function loadIdsXml(
+export async function loadIdsXml(
   input: Record<string, unknown>,
   ctx: ToolContext,
 ): Promise<string> {
@@ -278,7 +278,7 @@ const modelAudit: Tool = {
     if (unnamed > 0) {
       issues.push({
         severity: 'warning', category: 'data-quality', rule: 'has-name', entityCount: unnamed,
-        message: `${unnamed.toLocaleString()} of ${totalProducts.toLocaleString()} entities have no Name attribute.`,
+        message: `${fmtInt(unnamed)} of ${fmtInt(totalProducts)} entities have no Name attribute.`,
       });
     }
 
